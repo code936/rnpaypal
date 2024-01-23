@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <script>
+            var loadJS = function (url, location, implementationCode) {
+                //url is URL of external file, implementationCode is the code
+                //to be called from the file, location is the location to
+                //insert the <script> element
+                var scriptTag = document.createElement('script');
+                scriptTag.src = url;
+
+                scriptTag.onload = implementationCode;
+                scriptTag.onreadystatechange = implementationCode;
+
+                location.appendChild(scriptTag);
+            };
+
+            var getOrderRequest = null;
+            var paypalOrderId = null;
+            document.addEventListener('message', (data) => {
+                let message = JSON.parse(data.data);
+                if (message && message.messageSource) {
+                    if (message.messageSource === 'EngageMessage') {
+                        if (message.messageType === 'CreateOrderRequest') {
+                            getOrderRequest = (() => {
+                                let engageOrderData = message.payload;
+                                return () => engageOrderData;
+                            })();
+                        } else if (message.messageType === 'LoadPaypalButton') {
+                            loadJS(message.payload.srcUrl, document.body, () => {
+                                paypal
+                                    .Buttons({
+                                        createOrder,
+                                        onApprove,
+                                        onCancel,
+                                        onError,
+                                        onInit,
+                                        onClick
+                                    })
+                                    .render('#paypal-button-container');
+                            });
+                        } else if (message.messageType === 'PaypalOrderId') {
+                            paypalOrderId = message.payload;
+                            // document.getElementById("createOrderErrorId").innerHTML = message.messageType + " : " + paypalOrderId;
+                        }
+                    }
+                    // document.getElementById("createOrderErrorId").innerHTML = document.getElementById("createOrderErrorId").innerHTML +  "\n" + message.messageType;
+                }
+            });
+        </script>
+    </head>
+
+    <body>
+        <script>
+            function sendMessageToNative(data, actions, sender) {
+                if (
+                    window.ReactNativeWebView &&
+                    typeof window.ReactNativeWebView.postMessage === 'function'
+                ) {
+                    window.ReactNativeWebView.postMessage(
+                        JSON.stringify({ sender, data, actions }),
+                    );
+                }
+            }
+
+            function createOrder(data, actions) {
+                return new Promise((resolve, reject) => {
+                    sendMessageToNative(data, actions, 'createOrder');
+                    const refreshIntervalId = setInterval(() => {
+                        if (paypalOrderId) {
+                            clearInterval(refreshIntervalId);
+                            resolve(paypalOrderId);
+                        } else {
+                        }
+                    }, 1000);
+                });
+            }
+
+            function onApprove(data, actions) {
+                console.log(':: onApprove ::', data, actions);
+                sendMessageToNative(data, actions, 'onApprove');
+            }
+
+            function onCancel(data, actions) {
+                console.log(':: onCancel ::', data, actions);
+                sendMessageToNative(data, actions, 'onCancel');
+            }
+
+            function onError(data, actions) {
+                // document.getElementById("createOrderErrorId").innerHTML = document.getElementById("createOrderErrorId").innerHTML +
+                '\n' + JSON.stringify({ data, actions });
+                console.log(':: onError ::', data, actions);
+                sendMessageToNative(data, actions, 'onError');
+            }
+
+            // onInit is called when the button first renders
+            function onInit(data, actions) {
+                console.log(':: onInit ::', data, actions);
+                sendMessageToNative(data, actions, 'onInit');
+            }
+
+            function onClick(data, actions) {
+                console.log(':: onClick ::', data, actions);
+                sendMessageToNative(data, actions, 'onClick');
+            }
+        </script>
+        <div id="paypal-button-container"></div>
+        <!-- <div id="createOrderErrorId">No Token Available</div> -->
+    </body>
+</html>
